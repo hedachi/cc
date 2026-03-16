@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Menuet qui rêve ― 全曲リアルタイム解説</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:'Hiragino Kaku Gothic ProN',sans-serif;background:#08080c;color:#e0e0e0;overflow:hidden;display:flex;flex-direction:column}
+
+.header{padding:16px 16px 8px;text-align:center;flex-shrink:0}
+.composer{font-size:16px;color:#888;letter-spacing:4px;margin-bottom:2px}
+.piece-title{font-size:36px;font-weight:bold;color:#f0f0f0;margin-bottom:2px}
+.piece-sub{font-size:13px;color:#555;margin-bottom:10px}
+.piece-desc{
+  font-size:12px;color:#777;line-height:1.7;
+  max-width:640px;margin:0 auto 8px;text-align:left;
+}
+
+.player-bar{flex-shrink:0;background:#101018;border-bottom:1px solid #1a1a24;padding:6px 12px}
+.player-row{display:flex;align-items:center;gap:10px}
+.play-btn{
+  width:40px;height:40px;border-radius:50%;border:none;
+  background:#b060e0;color:#fff;font-size:16px;cursor:pointer;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+}
+.play-btn:active{transform:scale(0.95)}
+.time-display{flex:1;font-size:11px;color:#666;font-variant-numeric:tabular-nums}
+.progress{height:20px;background:#16161e;border-radius:4px;position:relative;cursor:pointer;margin-top:4px;overflow:hidden}
+.progress-sections{position:absolute;inset:0;display:flex;pointer-events:none}
+.progress-sections div{height:100%;display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(255,255,255,0.4)}
+.progress-head{position:absolute;top:0;left:0;width:2px;height:100%;background:#fff;box-shadow:0 0 4px #fff;pointer-events:none}
+
+.piano-roll{flex:1;background:#0c0c14;overflow:hidden;position:relative;min-height:200px}
+.piano-roll canvas{display:block;width:100%;height:100%}
+
+.bottom-bar{flex-shrink:0;background:#101018;border-top:1px solid #1a1a24;padding:8px 12px}
+.section-indicator{font-size:11px;font-weight:bold;letter-spacing:1px;margin-bottom:4px}
+.ann-text{font-size:14px;color:#ccc;line-height:1.6;height:2.8lh;overflow:hidden}
+
+.sec-a{color:#e07040}
+.sec-b{color:#40a0e0}
+.sec-coda{color:#b060e0}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="composer">RAVEL × DEBUSSY</div>
+  <div class="piece-title">Menuet qui rêve</div>
+  <div class="piece-sub">夢見るメヌエット ― 古風なメヌエット × アラベスク第1番</div>
+  <div class="piece-desc">
+    ラヴェル「古風なメヌエット」の旋律（下降3度、F#マイナーの和声）を、ドビュッシー「アラベスク第1番」のリズム（三連符）と伴奏パターン（波状アルペジオ）で歌わせた融合曲。F#マイナー⇔Eメジャーの調的揺らぎが全体を貫く。約1分12秒。
+  </div>
+</div>
+
+<div class="player-bar">
+  <div class="player-row">
+    <button class="play-btn" id="playBtn" onclick="toggle()">▶</button>
+    <div class="time-display" id="timeEl">0:00 / 1:12</div>
+  </div>
+  <div class="progress" id="prog" onclick="seek(event)">
+    <div class="progress-sections">
+      <div style="width:39.5%;background:rgba(224,112,64,0.15)">A 導入</div>
+      <div style="width:39.5%;background:rgba(64,160,224,0.15)">B 展開</div>
+      <div style="width:21%;background:rgba(176,96,224,0.15)">Coda</div>
+    </div>
+    <div class="progress-head" id="progHead"></div>
+  </div>
+</div>
+
+<div class="piano-roll">
+  <canvas id="rollCanvas"></canvas>
+</div>
+
+<audio id="audio" src="fusion1_short.mp3" preload="auto"></audio>
+
+<div class="bottom-bar">
+  <div class="section-indicator" id="sectionName">A 導入「夢見る冒頭」</div>
+  <div class="ann-text" id="annText">再生ボタンを押してください</div>
+</div>
+
+<script>
+const audio=document.getElementById('audio'),playBtn=document.getElementById('playBtn'),
+  timeEl=document.getElementById('timeEl'),progHead=document.getElementById('progHead'),
+  sectionNameEl=document.getElementById('sectionName'),
+  annText=document.getElementById('annText');
+
+function toggle(){if(audio.paused){audio.play();playBtn.textContent='⏸'}else{audio.pause();playBtn.textContent='▶'}}
+function seek(e){const r=document.getElementById('prog').getBoundingClientRect();audio.currentTime=((e.clientX-r.left)/r.width)*(audio.duration||72);if(audio.paused)toggle()}
+function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
+
+let allNotes=[];
+fetch('fusion1_notes.json').then(r=>r.json()).then(d=>{allNotes=d});
+
+const canvas=document.getElementById('rollCanvas'),ctx=canvas.getContext('2d');
+function resizeCanvas(){
+  const pr=window.devicePixelRatio||1;
+  canvas.width=canvas.offsetWidth*pr;
+  canvas.height=canvas.offsetHeight*pr;
+  ctx.setTransform(pr,0,0,pr,0,0);
+}
+resizeCanvas();window.addEventListener('resize',resizeCanvas);
+
+const NOTE_COLORS={'C':'#e06060','C#':'#e08040','D':'#e0a030','D#':'#c0b030','E':'#80c040','F':'#40b060','F#':'#40b0a0','G':'#40a0c0','G#':'#4080d0','A':'#6060d0','A#':'#8050c0','B':'#a040a0'};
+
+function drawRoll(t){
+  const w=canvas.offsetWidth,h=canvas.offsetHeight;
+  ctx.clearRect(0,0,w,h);
+
+  const minN=24,maxN=108,range=maxN-minN;
+  for(let oct=2;oct<=8;oct++){
+    const midiNote=oct*12;
+    if(midiNote>=minN&&midiNote<=maxN){
+      const y=h-((midiNote-minN)/range)*h;
+      ctx.strokeStyle='rgba(255,255,255,0.06)';
+      ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+      ctx.fillStyle='rgba(255,255,255,0.15)';
+      ctx.font='9px sans-serif';
+      ctx.fillText('C'+oct,2,y-2);
+    }
+  }
+
+  const win=4,tStart=t-1,tEnd=t+win-1;
+  const phPct=1/win;
+  const phX=phPct*w;
+
+  const nowNotes=[];
+  for(const n of allNotes){
+    if(n.t+n.d<tStart||n.t>tEnd)continue;
+    const x=((n.t-tStart)/(tEnd-tStart))*w;
+    const nw=Math.max(3,(n.d/(tEnd-tStart))*w);
+    const y=h-((n.n-minN)/range)*h;
+    const barH=Math.max(3,h/range*1.2);
+    const nn=n.nm.replace(/\d+/,'');
+    const c=NOTE_COLORS[nn]||'#888';
+    const isNow=n.t<=t&&t<n.t+n.d;
+
+    ctx.globalAlpha=isNow?1:0.35;
+    ctx.fillStyle=c;
+    const r=1.5;
+    ctx.beginPath();ctx.roundRect(x,y-barH/2,nw,barH,r);ctx.fill();
+
+    if(isNow){
+      ctx.fillStyle='rgba(255,255,255,0.15)';
+      ctx.beginPath();ctx.roundRect(x-1,y-barH/2-1,nw+2,barH+2,r+1);ctx.fill();
+      nowNotes.push(n);
+    }
+  }
+  ctx.globalAlpha=1;
+
+  ctx.font='bold 10px "SF Mono","Fira Code",monospace';
+  ctx.textBaseline='middle';
+  for(const n of nowNotes){
+    const x=((n.t-tStart)/(tEnd-tStart))*w;
+    const nw=Math.max(3,(n.d/(tEnd-tStart))*w);
+    const y=h-((n.n-minN)/range)*h;
+    const label=n.nm;
+    const tw=ctx.measureText(label).width;
+    const lx=nw>tw+6?x+3:x+nw+3;
+    if(lx+tw<w){
+      ctx.fillStyle='rgba(0,0,0,0.5)';
+      ctx.fillRect(lx-1,y-6,tw+2,12);
+      ctx.fillStyle='#fff';
+      ctx.fillText(label,lx,y);
+    }
+  }
+
+  ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(phX,0);ctx.lineTo(phX,h);ctx.stroke();
+  ctx.strokeStyle='rgba(255,255,255,0.15)';ctx.lineWidth=6;
+  ctx.beginPath();ctx.moveTo(phX,0);ctx.lineTo(phX,h);ctx.stroke();
+}
+
+const SEC_NAMES={'sec-a':'A 導入「夢見る冒頭」','sec-b':'B 展開「Eメジャーの光の中へ」','sec-coda':'Coda「余韻から静寂へ」'};
+
+// BPM=76, 3/4 -> 1 bar = 3 beats = 60/76*3 = 2.368s
+// A: bars 1-12 = 0-28.4s, B: bars 13-24 = 28.4-56.8s, Coda: bars 25-30 = 56.8-71s
+const anns=[
+// A section (0 - 28.4s)
+[0,'sec-a','冒頭。右手がF#5→E5→C#5と三連符で下降。メヌエットの下降3度をアラベスクのリズムで。'],
+[2.4,'sec-a','A4→C#5→E5と上昇。アラベスク的な波の動き。左手はF#mの波状アルペジオ。'],
+[4.7,'sec-a','F#5→D5→B4と再び下降、G#4→B4→D5と上昇。波のように上下を繰り返す。'],
+[7.1,'sec-a','C#5で長く伸ばしてB4へ。メヌエットの付点リズム的な長短の組み合わせ。'],
+[9.5,'sec-a','左手がD→Aへ和声移動。右手はA4→C#5→E5の三連符で再び波。'],
+[11.8,'sec-a','F#5が四分音符で鳴り、E5へ下降。メヌエットの荘厳さが顔を出す。'],
+[14.2,'sec-a','Eメジャーの領域へ。G#5が長く響く。アラベスクの明るい世界に入る。'],
+[16.6,'sec-a','E5→G#5→B5のEメジャーアルペジオ。左手もE→Bへ。調が明るく変わった。'],
+[18.9,'sec-a','A5からG#5、F#5→E5→D#5と下降。Eメジャースケールを降りていく。'],
+[21.3,'sec-a','F#マイナーに戻る。C#5が長く伸びる。メヌエットの世界への帰還。'],
+[23.7,'sec-a','2つの世界が溶け合う。C#5→E5→G#5と上昇（アラベスク）、A5→F#5→D5と下降3度（メヌエット）。'],
+[26.1,'sec-a','E5が伸びてD5へ。C#5→A4→F#4と下降してA section を閉じる。静かに着地。'],
+
+// B section (28.4 - 56.8s)
+[28.4,'sec-b','Eメジャーに転調！E5→G#5→B5→E6と2オクターブ近く駆け上がる。音域が一気に広がる。'],
+[30.8,'sec-b','A5→C#6→E6。さらに高く。左手もA→Eの広い波状アルペジオ。'],
+[33.2,'sec-b','F#5から下降。メヌエットの下降を高い音域で歌う。D#5→F#5→A5と三連符。'],
+[35.5,'sec-b','G#5が伸びてE5→D#5→C#5と降りていく。Eメジャーの甘い色彩。'],
+[37.9,'sec-b','B4→D#5→F#5と上昇、G#5で長く留まる。新しい旋律の展開。'],
+[40.3,'sec-b','E5→G#5→B5からC#6へ。B section で最も高い音域に到達しつつある。'],
+[42.6,'sec-b','A5→C#6→E6→F#6！曲中最高音。ここがクライマックスの頂点。'],
+[45.0,'sec-b','F#6から下降。D6→B5→G#5→A5→F#5→D5と一気に降りてくる。'],
+[47.4,'sec-b','F#m和音（F#5+A5+C#6）がブロックコードで鳴る。メヌエットの荘厳さ。'],
+[49.7,'sec-b','Emaj和音（E5+G#5+B5）と交互に。メヌエットとアラベスクの和音が対話する。'],
+[52.1,'sec-b','G#5から下降。E5→C#5→A4と降りていく。F#マイナーに戻る準備。'],
+[54.5,'sec-b','B4が伸びてA4へ。G#4→F#4→E4と最低音域まで降りる。B section の終わり。'],
+
+// Coda (56.8 - 71s)
+[56.8,'sec-coda','冒頭の三連符モチーフ（F#5→E5→C#5）が断片的に戻る。回想。'],
+[59.2,'sec-coda','A4→C#5→E5と上昇。D5が伸びてC#5→B4。波がゆっくり収まっていく。'],
+[61.6,'sec-coda','A4が長く伸びる。左手のアルペジオが簡素になる（三連符6音→四分音符3音）。'],
+[63.9,'sec-coda','F#4→A4→C#5と小さな波。E5が長く残る。テクスチャがどんどん薄くなる。'],
+[66.3,'sec-coda','A4の全音符。もう波は止まった。静寂に向かう。'],
+[68.7,'sec-coda','F#4が長く伸びる。最後にF#1（極低音）の残響。F#で始まりF#で消える。'],
+];
+
+let activeIdx=-1;
+let animFrame;
+
+function update(){
+  const t=audio.currentTime,dur=audio.duration||72;
+  progHead.style.left=(t/dur*100)+'%';
+  timeEl.textContent=fmt(t)+' / '+fmt(dur);
+  drawRoll(t);
+
+  let idx=-1;
+  for(let i=anns.length-1;i>=0;i--){if(t>=anns[i][0]){idx=i;break}}
+  if(idx!==activeIdx&&idx>=0){
+    activeIdx=idx;
+    const[,sec,text]=anns[idx];
+    sectionNameEl.textContent=SEC_NAMES[sec]||'';
+    sectionNameEl.className='section-indicator '+sec;
+    annText.textContent=text;
+  }
+  animFrame=requestAnimationFrame(update);
+}
+
+audio.addEventListener('play',()=>{animFrame=requestAnimationFrame(update)});
+audio.addEventListener('pause',()=>{cancelAnimationFrame(animFrame)});
+audio.addEventListener('ended',()=>{playBtn.textContent='▶';cancelAnimationFrame(animFrame)});
+drawRoll(0);
+</script>
+</body>
+</html>
