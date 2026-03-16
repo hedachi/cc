@@ -1,0 +1,377 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>古風なメヌエット ― 全曲リアルタイム解説</title>
+<meta name="description" content="ラヴェル「古風なメヌエット」を全曲再生しながら、技法と構造をリアルタイムで解説。ピアノロール表示・音名表示・5秒ごとの解説付き。">
+<meta property="og:title" content="ラヴェル「古風なメヌエット」全曲リアルタイム解説">
+<meta property="og:description" content="全曲再生しながら技法と構造をリアルタイム解説。ピアノロール表示／音名リアルタイム表示／5秒ごとの解説。Claude Codeが作曲プロジェクトの一環として制作。">
+<meta property="og:image" content="https://hedachi.github.io/cc/menuet_guide/og_menuet.png">
+<meta property="og:url" content="https://hedachi.github.io/cc/menuet_guide/v2.html">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="ラヴェル「古風なメヌエット」全曲リアルタイム解説">
+<meta name="twitter:description" content="全曲再生しながら技法と構造をリアルタイム解説。ピアノロール・音名表示・5秒ごとの解説付き。">
+<meta name="twitter:image" content="https://hedachi.github.io/cc/menuet_guide/og_menuet.png">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Hiragino Kaku Gothic ProN',sans-serif;background:#08080c;color:#e0e0e0;overflow-x:hidden}
+
+/* Fixed top player */
+.player-bar{
+  position:sticky;top:0;z-index:20;
+  background:#101018;
+  border-bottom:1px solid #1a1a24;
+  padding:8px 12px;
+}
+.player-row{display:flex;align-items:center;gap:10px}
+.play-btn{
+  width:44px;height:44px;border-radius:50%;border:none;
+  background:#e07040;color:#fff;font-size:18px;cursor:pointer;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+}
+.play-btn:active{transform:scale(0.95)}
+.player-info{flex:1;min-width:0}
+.player-title{font-size:14px;color:#ccc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.player-time{font-size:12px;color:#666;font-variant-numeric:tabular-nums}
+.progress{height:24px;background:#16161e;border-radius:4px;position:relative;cursor:pointer;margin-top:6px;overflow:hidden}
+.progress-sections{position:absolute;inset:0;display:flex;pointer-events:none}
+.progress-sections div{height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;color:rgba(255,255,255,0.4)}
+.progress-head{position:absolute;top:0;left:0;width:2px;height:100%;background:#fff;box-shadow:0 0 4px #fff;pointer-events:none}
+
+/* Piano roll - shows currently sounding notes */
+.piano-roll{
+  height:60px;
+  background:#0c0c14;
+  border-bottom:1px solid #1a1a24;
+  position:sticky;top:86px;z-index:15;
+  overflow:hidden;
+}
+.piano-roll canvas{display:block;width:100%;height:100%}
+
+/* Note name display */
+.note-names{
+  position:sticky;top:146px;z-index:14;
+  background:#101018;
+  border-bottom:1px solid #1a1a24;
+  padding:6px 12px;
+  font-family:'SF Mono','Fira Code',monospace;
+  font-size:13px;
+  min-height:32px;
+  display:flex;
+  align-items:center;
+  gap:6px;
+  flex-wrap:wrap;
+}
+.note-pill{
+  display:inline-block;
+  padding:1px 7px;
+  border-radius:8px;
+  font-size:12px;
+  animation:fadeIn 0.15s;
+}
+@keyframes fadeIn{from{opacity:0;transform:scale(0.8)}to{opacity:1;transform:scale(1)}}
+.note-pill.high{background:rgba(240,192,96,0.25);color:#f0c060}
+.note-pill.mid{background:rgba(160,200,240,0.2);color:#a0c8f0}
+.note-pill.low{background:rgba(96,192,128,0.2);color:#60c080}
+
+/* Annotation stream */
+.stream{padding:8px 12px 120px}
+.ann{
+  padding:10px 12px;
+  margin:4px 0;
+  border-radius:8px;
+  border-left:3px solid #333;
+  background:#12121a;
+  opacity:0.25;
+  transition:all 0.3s;
+  cursor:pointer;
+}
+.ann.active{opacity:1;background:#18182a}
+.ann.past{opacity:0.45}
+.ann-time{font-size:10px;color:#555;margin-bottom:2px;font-variant-numeric:tabular-nums}
+.ann-text{font-size:14px;color:#ccc;line-height:1.6}
+.ann-tags{margin-top:4px}
+.ann-tag{
+  display:inline-block;font-size:10px;
+  padding:1px 6px;border-radius:8px;margin:1px 3px 1px 0;
+}
+.ta{background:rgba(224,112,64,0.15);color:#e07040}
+.tb{background:rgba(64,160,224,0.15);color:#40a0e0}
+.tc{background:rgba(96,192,128,0.15);color:#60c080}
+.td{background:rgba(240,192,96,0.15);color:#f0c060}
+.te{background:rgba(176,96,224,0.15);color:#b060e0}
+
+/* Section colors on cards */
+.sec-a{border-left-color:#e07040}
+.sec-trio{border-left-color:#60c080}
+.sec-a2{border-left-color:#40a0e0}
+.sec-bridge{border-left-color:#e0c040}
+.sec-coda{border-left-color:#b060e0}
+</style>
+</head>
+<body>
+
+<div class="player-bar">
+  <div class="player-row">
+    <button class="play-btn" id="playBtn" onclick="toggle()">▶</button>
+    <div class="player-info">
+      <div class="player-title">ラヴェル「古風なメヌエット」(1895)</div>
+      <div class="player-time" id="timeEl">0:00 / 8:09</div>
+    </div>
+  </div>
+  <div class="progress" id="prog" onclick="seek(event)">
+    <div class="progress-sections">
+      <div style="width:29.2%;background:rgba(224,112,64,0.15)">メヌエット主題</div>
+      <div style="width:12%;background:rgba(96,192,128,0.15)">トリオ</div>
+      <div style="width:24.7%;background:rgba(64,160,224,0.15)">主題再現</div>
+      <div style="width:8.2%;background:rgba(224,192,64,0.15)">経過</div>
+      <div style="width:25.9%;background:rgba(176,96,224,0.15)">コーダ</div>
+    </div>
+    <div class="progress-head" id="progHead"></div>
+  </div>
+</div>
+
+<div class="piano-roll"><canvas id="rollCanvas"></canvas></div>
+<div class="note-names" id="noteNames"></div>
+
+<audio id="audio" src="menuet_full.mp3" preload="auto"></audio>
+<div class="stream" id="stream"></div>
+
+<script>
+const audio=document.getElementById('audio'),playBtn=document.getElementById('playBtn'),
+  timeEl=document.getElementById('timeEl'),progHead=document.getElementById('progHead'),
+  noteNamesEl=document.getElementById('noteNames'),streamEl=document.getElementById('stream');
+
+function toggle(){if(audio.paused){audio.play();playBtn.textContent='⏸'}else{audio.pause();playBtn.textContent='▶'}}
+function seek(e){const r=document.getElementById('prog').getBoundingClientRect();audio.currentTime=((e.clientX-r.left)/r.width)*(audio.duration||489);if(audio.paused)toggle()}
+function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
+
+// Note data loaded from JSON
+let allNotes=[];
+fetch('menuet_notes.json').then(r=>r.json()).then(d=>{allNotes=d});
+
+// Piano roll canvas
+const canvas=document.getElementById('rollCanvas'),ctx=canvas.getContext('2d');
+function resizeCanvas(){canvas.width=canvas.offsetWidth*2;canvas.height=canvas.offsetHeight*2;ctx.scale(2,2)}
+resizeCanvas();
+window.addEventListener('resize',resizeCanvas);
+
+const NOTE_COLORS={
+  'C':'#e06060','C#':'#e08040','D':'#e0a030','D#':'#c0b030',
+  'E':'#80c040','F':'#40b060','F#':'#40b0a0','G':'#40a0c0',
+  'G#':'#4080d0','A':'#6060d0','A#':'#8050c0','B':'#a040a0'
+};
+
+function drawRoll(t){
+  const w=canvas.offsetWidth,h=canvas.offsetHeight;
+  ctx.clearRect(0,0,w,h);
+  // Show notes in a 2-second window centered on current time
+  const window=3;
+  const tStart=t-0.5,tEnd=t+window;
+  const minNote=24,maxNote=108;
+  const noteRange=maxNote-minNote;
+
+  for(const n of allNotes){
+    if(n.t+n.d<tStart||n.t>tEnd)continue;
+    const x=((n.t-tStart)/(tEnd-tStart))*w;
+    const nw=Math.max(2,(n.d/(tEnd-tStart))*w);
+    const y=h-((n.n-minNote)/noteRange)*h;
+    const nh=Math.max(2,h/noteRange);
+    const noteName=n.nm.replace(/\d/,'');
+    const color=NOTE_COLORS[noteName]||'#888';
+    const isNow=n.t<=t&&t<n.t+n.d;
+    ctx.globalAlpha=isNow?1:0.4;
+    ctx.fillStyle=color;
+    ctx.fillRect(x,y-nh/2,nw,nh);
+    if(isNow){
+      ctx.fillStyle='#fff';
+      ctx.globalAlpha=0.3;
+      ctx.fillRect(x,y-nh/2-1,nw,nh+2);
+    }
+  }
+  // Playhead line
+  ctx.globalAlpha=0.6;
+  ctx.strokeStyle='#fff';
+  ctx.lineWidth=1;
+  const px=(0.5/window)*w;
+  ctx.beginPath();ctx.moveTo(px,0);ctx.lineTo(px,h);ctx.stroke();
+  ctx.globalAlpha=1;
+}
+
+// Currently sounding notes display
+function updateNoteNames(t){
+  const sounding=[];
+  for(const n of allNotes){
+    if(n.t<=t&&t<n.t+n.d){
+      sounding.push(n);
+    }
+    if(n.t>t+0.1)break;
+  }
+  // Group by register
+  sounding.sort((a,b)=>a.n-b.n);
+  let html='';
+  for(const n of sounding){
+    const cls=n.n>=72?'high':n.n>=48?'mid':'low';
+    html+=`<span class="note-pill ${cls}">${n.nm}</span>`;
+  }
+  noteNamesEl.innerHTML=html||'<span style="color:#444;font-size:12px">---</span>';
+}
+
+// Annotations - ~5 second intervals
+const anns=[
+// [time, secClass, text, tags]
+// === A: メヌエット主題 (0-142s) ===
+[0,'sec-a','曲は2.5秒の沈黙の後に始まる。この「間」が儀式的。','ta 様式'],
+[3,'sec-a','F#マイナーの和音がドスンと鳴る。B3〜A5の範囲。宮廷の扉が開くような冒頭。','ta 和音打ち','td F#マイナー'],
+[7,'sec-a','右手が高音域で旋律を歌い始める。E3〜C#6と音域が一気に広がる。','tb 旋律開始'],
+[12,'sec-a','下降3度のモチーフが登場。F#→D、E→C#と3度ずつ階段を降りる。この曲の最重要パターン。','ta 下降3度','te 核モチーフ'],
+[17,'sec-a','音域がG#2〜G#6に拡大。ピアノのほぼ全域を使う最初の瞬間。密度も上がる。','tb 音域拡大'],
+[22,'sec-a','付点リズム（ター・タ）が現れる。長い音→短い音の繰り返しで行進のような堂々さ。','ta 付点リズム'],
+[27,'sec-a','冒頭のフレーズが変奏されて繰り返す。同じ素材を少し変えて2回言う古典的手法。','te 反復変奏'],
+[32,'sec-a','再び音域がE2〜A5に。左手が低音で土台を支え、右手が旋律を歌う基本配置。','tb 左右の役割分担'],
+[37,'sec-a','音符の密度が急増（57音/5秒）。音域もG#2〜G#6。最初のフレーズの頂点。','td 密度ピーク','tb 最広音域'],
+[42,'sec-a','低音域（C#2〜C#5）に移行。主題が左手に渡された。旋律の受け渡し。','tb 旋律の左手移動','tc 低音の重み'],
+[47,'sec-a','B1まで下がる深い低音。右手も低め。暗く重いセクション。','tc 最低音域'],
+[52,'sec-a','D#2〜D#6の広い範囲で音がまばらに散らばる。テクスチャが急に薄くなる。対比。','tb テクスチャ変化'],
+[57,'sec-a','引き続き薄いテクスチャ。少ない音で空間を作る。次の盛り上がりへの準備。','tb 空間の演出'],
+[62,'sec-a','C#2〜F4。左手中心の動き。内声（中間の音域）に新しい旋律が現れる。','ta 内声の対旋律'],
+[67,'sec-a','F2〜F6に音域拡大。内声の旋律が発展。複数の旋律が同時進行する「対位法」的。','te 対位法','tb 内声の独立'],
+[72,'sec-a','引き続き対位法的な書き方。高音と低音で別々のメロディが絡み合う。','te 対位法'],
+[77,'sec-a','C#2〜G#4。低音域に集中。ドスドスと重い足取り。メヌエットの「踊り」の性格。','ta 舞曲のリズム'],
+[82,'sec-a','A1（かなり低い音）が登場。左手のオクターブ跳躍。力強い低音の支え。','tc オクターブ跳躍','td A1 極低音'],
+[87,'sec-a','B1〜D6に音域拡大。右手が高音域に戻り始める。クライマックスの予感。','tb 再上昇'],
+[92,'sec-a','C#2〜C#6。下降3度のモチーフが戻ってくる。今度はより装飾的に。','ta 下降3度 回帰'],
+[97,'sec-a','C#2〜D6。フレーズが展開していく。まだ頂点には達していない。','te 展開'],
+[102,'sec-a','密度が増加中。C#2〜D6の広い範囲で音が重なる。','td 密度増加'],
+[107,'sec-a','C#2〜B5。さらに音が詰まっていく。A section のクライマックスに向かう。','td 加速'],
+[112,'sec-a','密度最大（53音/5秒）。C#2〜B4。両手がフル稼働。','td 密度ピーク'],
+[117,'sec-a','B0（ピアノの最低音域付近）が鳴る！66音/5秒で曲中最大級の密度。低音の轟き。','td 最大密度','tc B0 極低音'],
+[122,'sec-a','F#2〜C#6。ff（フォルテッシモ）。分厚い和音の連打。A section の頂点。','td ff 最強音','ta 頂点'],
+[127,'sec-a','E3〜B5。頂点からやや落ち着く。フレーズの締めくくりに向かう。','te 収束'],
+[132,'sec-a','A2〜D6。再び盛り上がる。もう一押し。','td 再盛り上がり'],
+[137,'sec-a','C#2〜C#7！C#7は曲中最高音。最後の一撃。vel=106と非常に強い。','td C#7 最高音','ta 頂点'],
+[142,'sec-a','F#1〜F#5のff和音でA section が終わる。13音で一気に。重い幕切れ。','te セクション終結'],
+
+// === トリオ (143-200s) ===
+[146,'sec-trio','突然ピアニッシモに。vel=34。F#3〜C#5の狭い範囲。世界が一変する。','tc pp 静寂','tb テクスチャ激変'],
+[152,'sec-trio','D#3〜F#5。静かな旋律が始まる。教会旋法（ドリア旋法っぽい響き）。「古風」の核心。','ta 教会旋法','te 古風の本質'],
+[158,'sec-trio','F#2〜A#4。さっきまでの重厚さが嘘のように素朴。少ない音で歌う。','tb 薄いテクスチャ'],
+[163,'sec-trio','C#2〜A#4。低音が深くなるが、音数は少ないまま。空間が広い。','tc 低音の響き'],
+[168,'sec-trio','G#2〜B4。ゆったりと揺れる。メヌエットの3拍子が穏やかに感じられる。','ta 穏やかな3拍子'],
+[173,'sec-trio','F#2〜F#4の狭い範囲。最も音が少ない瞬間（11音/5秒）。ほぼ単旋律。','tb 最少音数','ta 単旋律'],
+[178,'sec-trio','F3〜F#5。少し動きが出る。新しいフレーズの始まり。','te 新フレーズ'],
+[183,'sec-trio','F#2〜A#4。トリオの中間。静かだが和声は移り変わっている。','td 和声の推移'],
+[188,'sec-trio','C#2〜G#4。やや暗くなる。主題再現への準備が始まる。','te 回帰の準備'],
+[193,'sec-trio','B2〜B4。和声が変化し、F#マイナーの気配が戻ってくる。','td 調の回帰'],
+[198,'sec-trio','F#2〜G#4。トリオが静かに閉じる。','te トリオ終結'],
+
+// === A' 主題再現 (200-323s) ===
+[203,'sec-a2','主題が戻る！だがvel=49（弱い）。D#4〜D#6の高音域で、半透明のように響く。最初のffとは全く違う。','te 再現部開始','tc pp再現'],
+[208,'sec-a2','C#2〜C#6。左手が加わり音域が広がるが、まだ静か。下降3度モチーフも静かに。','ta 下降3度 pp版'],
+[213,'sec-a2','C#4〜C#6。高音域だけで旋律を歌う。ガラス細工のような繊細さ。','tb 高音の繊細さ'],
+[218,'sec-a2','D#4〜D#6。密度は高いがvel=51（弱い）。多くの音を静かに鳴らす不思議な響き。','tc 静かな密度'],
+[223,'sec-a2','C#2〜E5。音域が下に広がる。段々と実体が戻ってくる感じ。','tb 音域の回復'],
+[228,'sec-a2','F#2〜D#5。vel=39と最も弱い部分。囁くような音。','tc 最弱音 pp'],
+[233,'sec-a2','D#2〜A#4。低音域に。少しずつ音量が戻り始める。','td 音量回復'],
+[238,'sec-a2','B1〜D#5。B1の深い低音が再登場。足元から響く。','tc 低音の帰還'],
+[243,'sec-a2','B3〜D#6。突然vel=98に！主題が力強く戻る。ppからffへの劇的な変化。','td 突然のff','te 劇的変化'],
+[248,'sec-a2','A#2〜D#5。一瞬落ち着く。波のような強弱の変化。','tb 波状の強弱'],
+[253,'sec-a2','C#3〜C#5。狭い音域で内省的。','tb 内省的'],
+[258,'sec-a2','F#3〜F#5。オクターブ範囲で旋律を歌う。','ta 旋律'],
+[263,'sec-a2','F#2〜A#4。付点リズムが低音域で。','ta 低音の付点'],
+[268,'sec-a2','C#2〜A#4。最低音域付近。重い足取りの再現。','tc 重い低音'],
+[273,'sec-a2','F#2〜B4。和声が不安定に揺れる。','td 和声の揺れ'],
+[278,'sec-a2','C#2〜A#4。vel=52。また静かに。強弱の波が続く。','tc 再び静か'],
+[283,'sec-a2','C#4〜D#6。また高音域で静かなpp再現。冒頭の繰り返しパターン。','tc pp 高音'],
+[288,'sec-a2','C#2〜C#6。左手が加わる。203秒の再現と同じ構造。','te 構造の反復'],
+[293,'sec-a2','C#3〜C#6。密度が高い(46音)がvel=45。静かな嵐。','tc 静かな密度'],
+[298,'sec-a2','D#4〜D#6。高音域で密度最大(57音)。煌めくような音の粒。','td 煌めき'],
+[303,'sec-a2','C#2〜E5。低音域に降りる。','tb 下降'],
+[308,'sec-a2','D#2〜D#5。vel=47。静かなまま展開。','tc 静かな展開'],
+[313,'sec-a2','B1〜A#4。音量が少し上がる(vel=57→70)。','td 漸増'],
+[318,'sec-a2','B2〜D#6。vel=92に上昇！再び力強く。','td ff再び'],
+
+// === 経過部 (323-361s) ===
+[323,'sec-bridge','A#2〜C#5。フレーズが変わる。次のセクションへの橋渡し。','te 経過部'],
+[328,'sec-bridge','C#3〜C#5。音が少なくなる。嵐の前の静けさ。','tb 静けさ'],
+[333,'sec-bridge','F3〜F#5。新しい和声の色。F natural（ナチュラル）が出てくる。','td Fナチュラル'],
+[338,'sec-bridge','F#2〜A#4。メヌエットの和声に戻りつつある。','td 和声の帰還'],
+[343,'sec-bridge','C#2〜G#4。低音が深くなる。コーダの準備。','te コーダ準備'],
+[348,'sec-bridge','F#2〜B4。vel=86。力が戻る。','td 力の回復'],
+[353,'sec-bridge','C#2〜G#4。一瞬弱くなってから…','tc 最後の静'],
+[358,'sec-bridge','最後の経過。主題が戻る直前。','te 直前の緊張'],
+
+// === A'' + コーダ (361-481s) ===
+[361,'sec-coda','F#3〜B5。主題が最後の登場！vel=91で堂々と。3度目の主題は最も力強い。','te 最終再現','td ff'],
+[366,'sec-coda','E3〜C#6。冒頭と同じ音型だが、より太く響く。経験を積んだ主題。','ta 下降3度 最終版'],
+[371,'sec-coda','E2〜A5。48音/5秒の高密度。全体が鳴り響く。','td 高密度'],
+[376,'sec-coda','G#2〜G#6。vel=106！曲中最強レベル。主題の総決算。','td fff 最強','ta 頂点'],
+[381,'sec-coda','C#2〜A3。突然低音域だけに。35音がC#2〜A3の狭い範囲に集中。低音の嵐。','tc 低音の嵐'],
+[386,'sec-coda','B1〜D#4。引き続き低音中心。地鳴りのような響き。','tc 地鳴り'],
+[391,'sec-coda','D#2〜D#6。高音が一瞬戻る。vel=57と静か。対比。','tb 静の挿入'],
+[396,'sec-coda','D#2〜A#3。また低音に。重い足取り。','tc 低音の行進'],
+[401,'sec-coda','C#2〜F4。vel=92。左手が力強く動く。','tc 左手の力'],
+[406,'sec-coda','F3〜F6。高音域に跳躍。F6は高い！','tb 高音跳躍'],
+[411,'sec-coda','F2〜G#3。低音のオクターブ連打。','tc オクターブ連打'],
+[416,'sec-coda','C2〜D#5。C2！曲中最低クラスの音。vel=104で叩きつける。','tc C2 極低音','td ff'],
+[421,'sec-coda','A1〜G#5。音域A1〜G#5の5オクターブ超。ピアノの全域。','tb 最大音域'],
+[426,'sec-coda','C#2〜D6。下降3度モチーフが高音で最後に歌う。','ta 下降3度 最後の歌'],
+[431,'sec-coda','C#2〜C#6。密度が上がっていく。終結に向けた畳み掛け。','td 畳み掛け'],
+[436,'sec-coda','C#2〜D6。和声が複雑に重なる。ラヴェルの色彩的和声。','td ラヴェル和声'],
+[441,'sec-coda','C#2〜C#6。まだ続く。音の洪水。','td 音の洪水'],
+[446,'sec-coda','C#2〜A5。42音。終結が近い。','te 終結接近'],
+[451,'sec-coda','C#2〜B4。62音/5秒！最大密度帯。すべてを出し切る。','td 最大密度'],
+[456,'sec-coda','B0〜A5。再びB0（最低音域）。vel=101。両端から鳴り響く。','tc B0再び','td ff'],
+[461,'sec-coda','F#2〜C#6。下降3度の最後の残響。','ta 下降3度 消えゆく'],
+[466,'sec-coda','D3〜B5。vel=92。まだ力がある。','td 力'],
+[471,'sec-coda','A2〜C#7。C#7再び！曲中最高音で最後の叫び。vel=105。','td C#7 最高音','ta 最後の叫び'],
+[476,'sec-coda','C#2〜F#5。vel=111。最後の重い和音の連打。','td 終止和音'],
+[481,'sec-coda','F#1〜C#3。たった4音。F#1の極低音が最後に残る。曲はF#で始まりF#で終わる。','te F#で終結','tc F#1 最後の音'],
+];
+
+// Build annotation cards
+anns.forEach((a,i)=>{
+  const [time,cls,text,... tags]=a;
+  const card=document.createElement('div');
+  card.className=`ann ${cls}`;
+  card.id=`ann-${i}`;
+  card.onclick=()=>{audio.currentTime=time;if(audio.paused)toggle()};
+  card.innerHTML=`<div class="ann-time">${fmt(time)}</div><div class="ann-text">${text}</div>`+
+    (tags.length?`<div class="ann-tags">${tags.map(t=>{const[c,...r]=t.split(' ');return`<span class="ann-tag ${c}">${r.join(' ')}</span>`}).join('')}</div>`:'');
+  streamEl.appendChild(card);
+});
+
+let activeAnn=-1;
+let animFrame;
+function update(){
+  const t=audio.currentTime,dur=audio.duration||489;
+  progHead.style.left=(t/dur*100)+'%';
+  timeEl.textContent=fmt(t)+' / '+fmt(dur);
+  drawRoll(t);
+  updateNoteNames(t);
+
+  // Active annotation
+  let idx=-1;
+  for(let i=anns.length-1;i>=0;i--){if(t>=anns[i][0]){idx=i;break}}
+  if(idx!==activeAnn){
+    activeAnn=idx;
+    document.querySelectorAll('.ann').forEach((c,i)=>{
+      c.classList.remove('active','past');
+      if(i===idx){c.classList.add('active');c.scrollIntoView({behavior:'smooth',block:'center'})}
+      else if(i<idx)c.classList.add('past');
+    });
+  }
+  animFrame=requestAnimationFrame(update);
+}
+
+audio.addEventListener('play',()=>{animFrame=requestAnimationFrame(update)});
+audio.addEventListener('pause',()=>{cancelAnimationFrame(animFrame)});
+audio.addEventListener('ended',()=>{playBtn.textContent='▶';cancelAnimationFrame(animFrame)});
+
+// Initial draw
+drawRoll(0);
+</script>
+</body>
+</html>
