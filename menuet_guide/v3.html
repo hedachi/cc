@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>古風なメヌエット ― 全曲リアルタイム解説</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{height:100%}
+body{font-family:'Hiragino Kaku Gothic ProN',sans-serif;background:#08080c;color:#e0e0e0;overflow:hidden;display:flex;flex-direction:column}
+
+.header{padding:16px 16px 8px;text-align:center;flex-shrink:0}
+.composer{font-size:16px;color:#888;letter-spacing:4px;margin-bottom:2px}
+.piece-title{font-size:36px;font-weight:bold;color:#f0f0f0;margin-bottom:2px}
+.piece-sub{font-size:13px;color:#555;margin-bottom:10px}
+.piece-desc{
+  font-size:12px;color:#777;line-height:1.7;
+  max-width:640px;margin:0 auto 8px;text-align:left;
+}
+
+.player-bar{flex-shrink:0;background:#101018;border-bottom:1px solid #1a1a24;padding:6px 12px}
+.player-row{display:flex;align-items:center;gap:10px}
+.play-btn{
+  width:40px;height:40px;border-radius:50%;border:none;
+  background:#e07040;color:#fff;font-size:16px;cursor:pointer;
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+}
+.play-btn:active{transform:scale(0.95)}
+.time-display{flex:1;font-size:11px;color:#666;font-variant-numeric:tabular-nums}
+.progress{height:20px;background:#16161e;border-radius:4px;position:relative;cursor:pointer;margin-top:4px;overflow:hidden}
+.progress-sections{position:absolute;inset:0;display:flex;pointer-events:none}
+.progress-sections div{height:100%;display:flex;align-items:center;justify-content:center;font-size:8px;color:rgba(255,255,255,0.4)}
+.progress-head{position:absolute;top:0;left:0;width:2px;height:100%;background:#fff;box-shadow:0 0 4px #fff;pointer-events:none}
+
+/* Piano roll - takes most of the screen */
+.piano-roll{flex:1;background:#0c0c14;overflow:hidden;position:relative;min-height:200px}
+.piano-roll canvas{display:block;width:100%;height:100%}
+
+/* Pitch labels on left side of piano roll */
+.pitch-labels{
+  position:absolute;left:0;top:0;bottom:0;width:28px;
+  pointer-events:none;z-index:2;
+  background:linear-gradient(to right,rgba(12,12,20,0.85),transparent);
+}
+
+/* Bottom bar: section + annotation */
+.bottom-bar{flex-shrink:0;background:#101018;border-top:1px solid #1a1a24;padding:8px 12px}
+.section-indicator{font-size:11px;font-weight:bold;letter-spacing:1px;margin-bottom:4px}
+.ann-text{font-size:14px;color:#ccc;line-height:1.6;height:2.8lh;overflow:hidden}
+
+.sec-a{color:#e07040}
+.sec-trio{color:#60c080}
+.sec-a2{color:#40a0e0}
+.sec-bridge{color:#e0c040}
+.sec-coda{color:#b060e0}
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="composer">MAURICE RAVEL</div>
+  <div class="piece-title">古風なメヌエット</div>
+  <div class="piece-sub">Menuet antique (1895) ピアノ独奏</div>
+  <div class="piece-desc">
+    18世紀の宮廷舞曲「メヌエット」の形式を借りつつ、19世紀末の色彩的な和声で再解釈した作品。3拍子の堂々とした歩み、下降する3度音程の繰り返し、主題部と対照的な静かな中間部（トリオ）という構成。F#マイナー。約8分。
+  </div>
+</div>
+
+<div class="player-bar">
+  <div class="player-row">
+    <button class="play-btn" id="playBtn" onclick="toggle()">▶</button>
+    <div class="time-display" id="timeEl">0:00 / 8:09</div>
+  </div>
+  <div class="progress" id="prog" onclick="seek(event)">
+    <div class="progress-sections">
+      <div style="width:29.2%;background:rgba(224,112,64,0.15)">メヌエット主題</div>
+      <div style="width:12%;background:rgba(96,192,128,0.15)">トリオ</div>
+      <div style="width:24.7%;background:rgba(64,160,224,0.15)">主題再現</div>
+      <div style="width:8.2%;background:rgba(224,192,64,0.15)">経過</div>
+      <div style="width:25.9%;background:rgba(176,96,224,0.15)">コーダ</div>
+    </div>
+    <div class="progress-head" id="progHead"></div>
+  </div>
+</div>
+
+<div class="piano-roll">
+  <canvas id="rollCanvas"></canvas>
+</div>
+
+<audio id="audio" src="menuet_full.mp3" preload="auto"></audio>
+
+<div class="bottom-bar">
+  <div class="section-indicator" id="sectionName">A メヌエット主題</div>
+  <div class="ann-text" id="annText">再生ボタンを押してください</div>
+</div>
+
+<script>
+const audio=document.getElementById('audio'),playBtn=document.getElementById('playBtn'),
+  timeEl=document.getElementById('timeEl'),progHead=document.getElementById('progHead'),
+  sectionNameEl=document.getElementById('sectionName'),
+  annText=document.getElementById('annText');
+
+function toggle(){if(audio.paused){audio.play();playBtn.textContent='⏸'}else{audio.pause();playBtn.textContent='▶'}}
+function seek(e){const r=document.getElementById('prog').getBoundingClientRect();audio.currentTime=((e.clientX-r.left)/r.width)*(audio.duration||489);if(audio.paused)toggle()}
+function fmt(s){return Math.floor(s/60)+':'+String(Math.floor(s%60)).padStart(2,'0')}
+
+let allNotes=[];
+fetch('menuet_notes.json').then(r=>r.json()).then(d=>{allNotes=d});
+
+const canvas=document.getElementById('rollCanvas'),ctx=canvas.getContext('2d');
+function resizeCanvas(){
+  const pr=window.devicePixelRatio||1;
+  canvas.width=canvas.offsetWidth*pr;
+  canvas.height=canvas.offsetHeight*pr;
+  ctx.setTransform(pr,0,0,pr,0,0);
+}
+resizeCanvas();window.addEventListener('resize',resizeCanvas);
+
+const NOTE_NAMES_ALL=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const NOTE_COLORS={'C':'#e06060','C#':'#e08040','D':'#e0a030','D#':'#c0b030','E':'#80c040','F':'#40b060','F#':'#40b0a0','G':'#40a0c0','G#':'#4080d0','A':'#6060d0','A#':'#8050c0','B':'#a040a0'};
+
+function drawRoll(t){
+  const w=canvas.offsetWidth,h=canvas.offsetHeight;
+  ctx.clearRect(0,0,w,h);
+
+  // Draw subtle horizontal lines for octaves
+  const minN=24,maxN=108,range=maxN-minN;
+  for(let oct=2;oct<=8;oct++){
+    const midiNote=oct*12;// C of that octave
+    if(midiNote>=minN&&midiNote<=maxN){
+      const y=h-((midiNote-minN)/range)*h;
+      ctx.strokeStyle='rgba(255,255,255,0.06)';
+      ctx.lineWidth=1;
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke();
+      // Octave label
+      ctx.fillStyle='rgba(255,255,255,0.15)';
+      ctx.font='9px sans-serif';
+      ctx.fillText('C'+oct,2,y-2);
+    }
+  }
+
+  const win=4,tStart=t-1,tEnd=t+win-1;
+
+  // Playhead position
+  const phPct=1/win;
+  const phX=phPct*w;
+
+  // Draw notes
+  const nowNotes=[];
+  for(const n of allNotes){
+    if(n.t+n.d<tStart||n.t>tEnd)continue;
+    const x=((n.t-tStart)/(tEnd-tStart))*w;
+    const nw=Math.max(3,(n.d/(tEnd-tStart))*w);
+    const y=h-((n.n-minN)/range)*h;
+    const barH=Math.max(3,h/range*1.2);
+    const nn=n.nm.replace(/\d+/,'');
+    const c=NOTE_COLORS[nn]||'#888';
+    const isNow=n.t<=t&&t<n.t+n.d;
+
+    ctx.globalAlpha=isNow?1:0.35;
+    ctx.fillStyle=c;
+
+    // Rounded rect
+    const r=1.5;
+    ctx.beginPath();
+    ctx.roundRect(x,y-barH/2,nw,barH,r);
+    ctx.fill();
+
+    if(isNow){
+      // Glow
+      ctx.fillStyle='rgba(255,255,255,0.15)';
+      ctx.beginPath();
+      ctx.roundRect(x-1,y-barH/2-1,nw+2,barH+2,r+1);
+      ctx.fill();
+      nowNotes.push(n);
+    }
+  }
+  ctx.globalAlpha=1;
+
+  // Draw note names on currently sounding notes
+  ctx.font='bold 10px "SF Mono","Fira Code",monospace';
+  ctx.textBaseline='middle';
+  for(const n of nowNotes){
+    const x=((n.t-tStart)/(tEnd-tStart))*w;
+    const nw=Math.max(3,(n.d/(tEnd-tStart))*w);
+    const y=h-((n.n-minN)/range)*h;
+    const label=n.nm;
+    const tw=ctx.measureText(label).width;
+    // Position label to the right of the bar, or inside if wide enough
+    const lx=nw>tw+6?x+3:x+nw+3;
+    if(lx+tw<w){
+      ctx.fillStyle='rgba(0,0,0,0.5)';
+      ctx.fillRect(lx-1,y-6,tw+2,12);
+      ctx.fillStyle='#fff';
+      ctx.fillText(label,lx,y);
+    }
+  }
+
+  // Playhead line
+  ctx.strokeStyle='rgba(255,255,255,0.7)';
+  ctx.lineWidth=1.5;
+  ctx.beginPath();ctx.moveTo(phX,0);ctx.lineTo(phX,h);ctx.stroke();
+  // Subtle glow
+  ctx.strokeStyle='rgba(255,255,255,0.15)';
+  ctx.lineWidth=6;
+  ctx.beginPath();ctx.moveTo(phX,0);ctx.lineTo(phX,h);ctx.stroke();
+}
+
+const SEC_COLORS={'sec-a':'#e07040','sec-trio':'#60c080','sec-a2':'#40a0e0','sec-bridge':'#e0c040','sec-coda':'#b060e0'};
+const SEC_NAMES={'sec-a':'A メヌエット主題','sec-trio':'トリオ（中間部）','sec-a2':'A\' 主題再現','sec-bridge':'経過部','sec-coda':'コーダ（終結部）'};
+
+// [time, secClass, text]
+const anns=[
+[0,'sec-a','曲は2.5秒の沈黙の後に始まる。この「間」が儀式的。'],
+[3,'sec-a','F#マイナーの和音がドスンと鳴る。宮廷の扉が開くような冒頭。'],
+[7,'sec-a','右手が高音域で旋律を歌い始める。音域が一気に広がる。'],
+[12,'sec-a','下降3度のモチーフ。F#→D、E→C#と階段を降りる。この曲の最重要パターン。'],
+[17,'sec-a','音域がG#2〜G#6に拡大。ピアノのほぼ全域を使う最初の瞬間。'],
+[22,'sec-a','付点リズム（ター・タ）が現れる。長短の繰り返しで堂々とした歩み。'],
+[27,'sec-a','冒頭のフレーズが変奏されて繰り返す。同じ素材を少し変えて2回言う古典的手法。'],
+[32,'sec-a','左手が低音で土台を支え、右手が旋律を歌う基本配置。'],
+[37,'sec-a','音符の密度が急増。最初のフレーズの頂点。'],
+[42,'sec-a','低音域に移行。主題が左手に渡された。旋律の受け渡し。'],
+[47,'sec-a','B1まで下がる深い低音。暗く重いセクション。'],
+[52,'sec-a','テクスチャが急に薄くなる。少ない音で空間を作る。対比の効果。'],
+[57,'sec-a','引き続き薄いテクスチャ。次の盛り上がりへの準備。'],
+[62,'sec-a','左手中心の動き。中間の音域に新しい旋律が現れる。'],
+[67,'sec-a','内声の旋律が発展。複数の旋律線が同時に進行する。'],
+[72,'sec-a','高音と低音で別々のメロディが絡み合う。'],
+[77,'sec-a','低音域に集中。ドスドスと重い足取り。メヌエットの「踊り」の性格。'],
+[82,'sec-a','A1（かなり低い音）が登場。左手のオクターブ跳躍。'],
+[87,'sec-a','右手が高音域に戻り始める。クライマックスの予感。'],
+[92,'sec-a','下降3度のモチーフが戻ってくる。今度はより装飾的に。'],
+[97,'sec-a','フレーズが展開していく。まだ頂点には達していない。'],
+[102,'sec-a','密度が増加中。広い音域で音が重なる。'],
+[107,'sec-a','さらに音が詰まっていく。クライマックスに向かう。'],
+[112,'sec-a','密度最大。両手がフル稼働。'],
+[117,'sec-a','B0（ピアノの最低音域付近）が鳴る！低音の轟き。'],
+[122,'sec-a','ff（フォルテッシモ）。分厚い和音の連打。A section の頂点。'],
+[127,'sec-a','頂点からやや落ち着く。フレーズの締めくくりに向かう。'],
+[132,'sec-a','再び盛り上がる。もう一押し。'],
+[137,'sec-a','C#7（曲中最高音のひとつ）が鳴る。最後の一撃。'],
+[142,'sec-a','F#の和音でA section が終わる。重い幕切れ。'],
+[146,'sec-trio','突然ピアニッシモに。世界が一変する。'],
+[152,'sec-trio','静かな旋律が始まる。古い教会音楽的な響き。「古風」の核心。'],
+[158,'sec-trio','さっきまでの重厚さが嘘のように素朴。少ない音で歌う。'],
+[163,'sec-trio','低音が深くなるが、音数は少ないまま。空間が広い。'],
+[168,'sec-trio','ゆったりと揺れる。メヌエットの3拍子が穏やかに感じられる。'],
+[173,'sec-trio','最も音が少ない瞬間。ほぼ1本の旋律線だけ。'],
+[178,'sec-trio','少し動きが出る。新しいフレーズの始まり。'],
+[183,'sec-trio','トリオの中間。静かだが和声は移り変わっている。'],
+[188,'sec-trio','やや暗くなる。主題再現への準備が始まる。'],
+[193,'sec-trio','和声が変化し、F#マイナーの気配が戻ってくる。'],
+[198,'sec-trio','トリオが静かに閉じる。'],
+[203,'sec-a2','主題が戻る！だがとても静か。高音域で半透明のように響く。'],
+[208,'sec-a2','左手が加わり音域が広がるが、まだ静か。下降3度も囁くように。'],
+[213,'sec-a2','高音域だけで旋律を歌う。ガラス細工のような繊細さ。'],
+[218,'sec-a2','密度は高いが弱い。多くの音を静かに鳴らす不思議な響き。'],
+[223,'sec-a2','音域が下に広がる。段々と実体が戻ってくる感じ。'],
+[228,'sec-a2','曲中最も弱い部分。囁くような音。'],
+[233,'sec-a2','低音域に。少しずつ音量が戻り始める。'],
+[238,'sec-a2','B1の深い低音が再登場。足元から響く。'],
+[243,'sec-a2','突然強くなる！主題が力強く戻る。ppからffへの劇的な変化。'],
+[248,'sec-a2','一瞬落ち着く。波のような強弱の変化。'],
+[253,'sec-a2','狭い音域で内省的。'],
+[258,'sec-a2','オクターブ範囲で旋律を歌う。'],
+[263,'sec-a2','付点リズムが低音域で。'],
+[268,'sec-a2','最低音域付近。重い足取りの再現。'],
+[273,'sec-a2','和声が不安定に揺れる。'],
+[278,'sec-a2','また静かに。強弱の波が続く。'],
+[283,'sec-a2','また高音域で静かな再現。冒頭の繰り返しパターン。'],
+[288,'sec-a2','左手が加わる。203秒の再現と同じ構造。'],
+[293,'sec-a2','密度が高いが静か。静かな嵐。'],
+[298,'sec-a2','高音域で密度最大。煌めくような音の粒。'],
+[303,'sec-a2','低音域に降りる。'],
+[308,'sec-a2','静かなまま展開。'],
+[313,'sec-a2','音量が少し上がる。'],
+[318,'sec-a2','再び力強く！'],
+[323,'sec-bridge','フレーズが変わる。次のセクションへの橋渡し。'],
+[328,'sec-bridge','音が少なくなる。嵐の前の静けさ。'],
+[333,'sec-bridge','新しい和声の色。'],
+[338,'sec-bridge','メヌエットの和声に戻りつつある。'],
+[343,'sec-bridge','低音が深くなる。コーダの準備。'],
+[348,'sec-bridge','力が戻る。'],
+[353,'sec-bridge','一瞬弱くなってから…'],
+[358,'sec-bridge','最後の経過。主題が戻る直前。'],
+[361,'sec-coda','主題が最後の登場！堂々と。3度目の主題は最も力強い。'],
+[366,'sec-coda','冒頭と同じ音型だが、より太く響く。'],
+[371,'sec-coda','高密度。全体が鳴り響く。'],
+[376,'sec-coda','曲中最強。主題の総決算。'],
+[381,'sec-coda','突然低音域だけに。低音の嵐。'],
+[386,'sec-coda','引き続き低音中心。地鳴りのような響き。'],
+[391,'sec-coda','高音が一瞬戻る。対比。'],
+[396,'sec-coda','また低音に。重い足取り。'],
+[401,'sec-coda','左手が力強く動く。'],
+[406,'sec-coda','高音域に跳躍。F6が鳴る。'],
+[411,'sec-coda','低音のオクターブ連打。'],
+[416,'sec-coda','C2（曲中最低クラスの音）を叩きつける。'],
+[421,'sec-coda','音域5オクターブ超。ピアノの全域が鳴る。'],
+[426,'sec-coda','下降3度モチーフが高音で最後に歌う。'],
+[431,'sec-coda','密度が上がっていく。終結に向けた畳み掛け。'],
+[436,'sec-coda','和声が複雑に重なる。ラヴェルの色彩的和声。'],
+[441,'sec-coda','まだ続く。音の洪水。'],
+[446,'sec-coda','終結が近い。'],
+[451,'sec-coda','最大密度帯。すべてを出し切る。'],
+[456,'sec-coda','B0（最低音域）が再び。両端から鳴り響く。'],
+[461,'sec-coda','下降3度の最後の残響。'],
+[466,'sec-coda','まだ力がある。'],
+[471,'sec-coda','C#7（最高音）で最後の叫び。'],
+[476,'sec-coda','最後の重い和音の連打。'],
+[481,'sec-coda','たった4音。F#1の極低音が最後に残る。F#で始まりF#で終わる。'],
+];
+
+let activeIdx=-1;
+let animFrame;
+
+function update(){
+  const t=audio.currentTime,dur=audio.duration||489;
+  progHead.style.left=(t/dur*100)+'%';
+  timeEl.textContent=fmt(t)+' / '+fmt(dur);
+  drawRoll(t);
+
+  let idx=-1;
+  for(let i=anns.length-1;i>=0;i--){if(t>=anns[i][0]){idx=i;break}}
+  if(idx!==activeIdx&&idx>=0){
+    activeIdx=idx;
+    const[,sec,text]=anns[idx];
+    sectionNameEl.textContent=SEC_NAMES[sec]||'';
+    sectionNameEl.className='section-indicator '+ sec;
+    annText.textContent=text;
+  }
+  animFrame=requestAnimationFrame(update);
+}
+
+audio.addEventListener('play',()=>{animFrame=requestAnimationFrame(update)});
+audio.addEventListener('pause',()=>{cancelAnimationFrame(animFrame)});
+audio.addEventListener('ended',()=>{playBtn.textContent='▶';cancelAnimationFrame(animFrame)});
+drawRoll(0);
+</script>
+</body>
+</html>
